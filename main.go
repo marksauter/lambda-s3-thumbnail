@@ -42,7 +42,7 @@ func handle(ctx context.Context, req events.S3Event) (string, error) {
 			// generate thumbnail
 			uploadsBucket := r.S3.Bucket.Name
 			imagesBucket := os.Getenv("IMAGES_BUCKET")
-			getSource(uploadsBucket, key)
+			getSource(uploadsBucket, imagesBucket, key)
 			for _, t := range transforms {
 				genThumb(t, uploadsBucket, imagesBucket, key)
 			}
@@ -51,7 +51,7 @@ func handle(ctx context.Context, req events.S3Event) (string, error) {
 	return fmt.Sprintf("%d records processed", len(req.Records)), nil
 }
 
-func getSource(srcBucket, key string) {
+func getSource(srcBucket, destBucket, key string) {
 	local := tmp + srcBucket + "/" + key
 
 	// ensure path is available
@@ -84,6 +84,28 @@ func getSource(srcBucket, key string) {
 		"filename": local,
 		"bytes":    n,
 	}).Info("file downloaded")
+
+	// upload to src image to destination bucket
+	up, err := os.Open(local)
+	if err != nil {
+		log.WithError(err).WithField("filename", local).Error("failed to open file")
+		return
+	}
+
+	result, err := uploader.Upload(&s3manager.UploadInput{
+		Bucket: aws.String(destBucket),
+		Key:    aws.String(key),
+		Body:   up,
+	})
+
+	if err != nil {
+		log.WithError(err).WithFields(log.Fields{
+			"bucket":   destBucket,
+			"filename": key,
+		}).Error("failed to upload file")
+	}
+
+	log.WithField("location", result.Location).Info("file uploaded")
 }
 
 func genThumb(transform int, srcBucket, destBucket, key string) {
