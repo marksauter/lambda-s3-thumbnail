@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -31,6 +32,8 @@ var uploader = s3manager.NewUploader(sess)
 // Create a downloader with session and default option
 var downloader = s3manager.NewDownloader(sess)
 
+var transforms = [2]int{400, 800}
+
 func handle(ctx context.Context, req events.S3Event) (string, error) {
 	log.SetOutput(os.Stdout)
 	log.Infof("%v", req)
@@ -39,13 +42,15 @@ func handle(ctx context.Context, req events.S3Event) (string, error) {
 			// generate thumbnail
 			uploadsBucket := r.S3.Bucket.Name
 			imagesBucket := os.Getenv("IMAGES_BUCKET")
-			genThumb(uploadsBucket, imagesBucket, key)
+			for _, t := range transforms {
+				genThumb(t, uploadsBucket, imagesBucket, key)
+			}
 		}
 	}
 	return fmt.Sprintf("%d records processed", len(req.Records)), nil
 }
 
-func genThumb(srcBucket, destBucket, key string) {
+func genThumb(transform int, srcBucket, destBucket, key string) {
 	local := tmp + srcBucket + "/" + key
 
 	// ensure path is available
@@ -83,16 +88,16 @@ func genThumb(srcBucket, destBucket, key string) {
 	if err != nil {
 		panic(err)
 	}
-	thumb := imaging.Thumbnail(img, 100, 100, imaging.CatmullRom)
+	thumb := imaging.Thumbnail(img, transform, transform, imaging.CatmullRom)
 
 	// create a new blank image
-	dst := imaging.New(100, 100, color.NRGBA{0, 0, 0, 0})
+	dst := imaging.New(transform, transform, color.NRGBA{0, 0, 0, 0})
 
 	// paste thumbnails into the new image
 	dst = imaging.Paste(dst, thumb, image.Pt(0, 0))
 
 	// save the combined image to file
-	thumbName := strings.TrimSuffix(key, filepath.Ext(key)) + "-100" + filepath.Ext(key)
+	thumbName := strings.TrimSuffix(key, filepath.Ext(key)) + "-" + strconv.Itoa(transform) + filepath.Ext(key)
 	thumbLocal := tmp + destBucket + thumbName
 
 	// ensure path is available
