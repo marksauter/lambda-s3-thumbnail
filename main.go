@@ -42,6 +42,7 @@ func handle(ctx context.Context, req events.S3Event) (string, error) {
 			// generate thumbnail
 			uploadsBucket := r.S3.Bucket.Name
 			imagesBucket := os.Getenv("IMAGES_BUCKET")
+			getSource(uploadsBucket, key)
 			for _, t := range transforms {
 				genThumb(t, uploadsBucket, imagesBucket, key)
 			}
@@ -50,7 +51,7 @@ func handle(ctx context.Context, req events.S3Event) (string, error) {
 	return fmt.Sprintf("%d records processed", len(req.Records)), nil
 }
 
-func genThumb(transform int, srcBucket, destBucket, key string) {
+func getSource(srcBucket, key string) {
 	local := tmp + srcBucket + "/" + key
 
 	// ensure path is available
@@ -83,6 +84,10 @@ func genThumb(transform int, srcBucket, destBucket, key string) {
 		"filename": local,
 		"bytes":    n,
 	}).Info("file downloaded")
+}
+
+func genThumb(transform int, srcBucket, destBucket, key string) {
+	local := tmp + srcBucket + "/" + key
 
 	img, err := imaging.Open(local)
 	if err != nil {
@@ -101,7 +106,7 @@ func genThumb(transform int, srcBucket, destBucket, key string) {
 	thumbLocal := tmp + destBucket + thumbName
 
 	// ensure path is available
-	dir = filepath.Dir(thumbLocal)
+	dir := filepath.Dir(thumbLocal)
 	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 		log.WithError(err).WithField("path", dir).Error("failed to create tmp directory")
 	}
