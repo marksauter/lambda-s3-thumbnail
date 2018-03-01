@@ -37,15 +37,16 @@ func handle(ctx context.Context, req events.S3Event) (string, error) {
 	for _, r := range req.Records {
 		if key := r.S3.Object.Key; isImage(key) {
 			// generate thumbnail
-			bucket := r.S3.Bucket.Name
-			genThumb(bucket, key)
+			uploadsBucket := r.S3.Bucket.Name
+			imagesBucket := os.Getenv("IMAGES_BUCKET")
+			genThumb(uploadsBucket, imagesBucket, key)
 		}
 	}
 	return fmt.Sprintf("%d records processed", len(req.Records)), nil
 }
 
-func genThumb(bucket, key string) {
-	local := tmp + bucket + "/" + key
+func genThumb(srcBucket, destBucket, key string) {
+	local := tmp + srcBucket + "/" + key
 
 	// ensure path is available
 	dir := filepath.Dir(local)
@@ -61,12 +62,12 @@ func genThumb(bucket, key string) {
 	}
 
 	n, err := downloader.Download(f, &s3.GetObjectInput{
-		Bucket: aws.String(bucket),
+		Bucket: aws.String(srcBucket),
 		Key:    aws.String(key),
 	})
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{
-			"bucket":   bucket,
+			"bucket":   srcBucket,
 			"key":      key,
 			"filename": local,
 		}).Error("failed to download file")
@@ -91,8 +92,15 @@ func genThumb(bucket, key string) {
 	dst = imaging.Paste(dst, thumb, image.Pt(0, 0))
 
 	// save the combined image to file
-	thumbName := key[:len(key)-4] + "_thumb" + key[len(key)-4:]
-	thumbLocal := "/tmp/" + thumbName
+	thumbName := strings.TrimSuffix(key, filepath.Ext(key)) + "-100" + filepath.Ext(key)
+	thumbLocal := tmp + destBucket + thumbName
+
+	// ensure path is available
+	dir = filepath.Dir(thumbLocal)
+	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+		log.WithError(err).WithField("path", dir).Error("failed to create tmp directory")
+	}
+
 	err = imaging.Save(dst, thumbLocal)
 	if err != nil {
 		log.WithError(err).WithField("thumbnail", thumbLocal).Error("failed to generate thumbnail")
@@ -107,14 +115,14 @@ func genThumb(bucket, key string) {
 	}
 
 	result, err := uploader.Upload(&s3manager.UploadInput{
-		Bucket: aws.String(bucket),
+		Bucket: aws.String(destBucket),
 		Key:    aws.String(thumbName),
 		Body:   up,
 	})
 
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{
-			"bucket":    bucket,
+			"bucket":    destBucket,
 			"thumbnail": thumbName,
 		}).Error("failed to upload file")
 	}

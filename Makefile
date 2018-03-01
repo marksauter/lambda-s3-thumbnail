@@ -30,19 +30,27 @@ PACKAGE ?= $(HANDLER)
 GOPATH  ?= $(HOME)/go
 GOOS    ?= linux
 GOARCH  ?= amd64
+ZIP     ?= 7z a
+
+REGION               ?= us-east-1
+PACKAGE_BUCKET       ?= lambda-$(REGION)-markus-ninja
+
 
 WORKDIR = $(CURDIR:$(GOPATH)%=/go%)
 ifeq ($(WORKDIR),$(CURDIR))
 	WORKDIR = /tmp
 endif
 
-all: build pack 
+package: build pack upload 
 
 build:
 	@GOOS=$(GOOS) GOARCH=$(GOARCH) go build -ldflags='-w -s' -o $(HANDLER)
 
 pack:
-	@zip $(PACKAGE).zip $(HANDLER)
+	@${ZIP} $(PACKAGE).zip $(HANDLER)
+
+upload:
+	@aws s3 cp main.zip s3://$(PACKAGE_BUCKET)/s3-thumbnail.zip
 
 clean:
 	@rm -rf $(HANDLER) $(PACKAGE).zip
