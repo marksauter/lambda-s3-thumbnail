@@ -32,8 +32,8 @@ GOOS    ?= linux
 GOARCH  ?= amd64
 ZIP     ?= 7z a
 
-REGION               ?= us-east-1
-PACKAGE_BUCKET       ?= lambda-$(REGION)-markus-ninja
+REGION         ?= us-east-1
+PACKAGE_BUCKET ?= lambda-$(REGION)-markus-ninja
 
 
 WORKDIR = $(CURDIR:$(GOPATH)%=/go%)
@@ -55,4 +55,4 @@ upload:
 clean:
 	@rm -rf $(HANDLER) $(PACKAGE).zip
 
-.PHONY: all build pack clean
+.PHONY: package build pack upload clean
