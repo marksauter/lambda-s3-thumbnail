@@ -32,7 +32,7 @@ var uploader = s3manager.NewUploader(sess)
 // Create a downloader with session and default option
 var downloader = s3manager.NewDownloader(sess)
 
-var transforms = [2]int{200, 400, 800}
+var transforms = [3]int{200, 400, 800}
 
 func handle(ctx context.Context, req events.S3Event) (string, error) {
 	log.SetOutput(os.Stdout)
@@ -40,18 +40,18 @@ func handle(ctx context.Context, req events.S3Event) (string, error) {
 	for _, r := range req.Records {
 		if key := r.S3.Object.Key; isImage(key) {
 			// generate thumbnail
-			uploadsBucket := r.S3.Bucket.Name
-			imagesBucket := os.Getenv("IMAGES_BUCKET")
-			getSource(uploadsBucket, imagesBucket, key)
+			srcBucket := r.S3.Bucket.Name
+			destBucket := os.Getenv("DESTINATION_BUCKET")
+			getSource(srcBucket, key)
 			for _, t := range transforms {
-				genThumb(t, uploadsBucket, imagesBucket, key)
+				genThumb(t, srcBucket, destBucket, key)
 			}
 		}
 	}
 	return fmt.Sprintf("%d records processed", len(req.Records)), nil
 }
 
-func getSource(srcBucket, destBucket, key string) {
+func getSource(srcBucket, key string) {
 	local := tmp + srcBucket + "/" + key
 
 	// ensure path is available
@@ -84,28 +84,6 @@ func getSource(srcBucket, destBucket, key string) {
 		"filename": local,
 		"bytes":    n,
 	}).Info("file downloaded")
-
-	// upload to src image to destination bucket
-	up, err := os.Open(local)
-	if err != nil {
-		log.WithError(err).WithField("filename", local).Error("failed to open file")
-		return
-	}
-
-	result, err := uploader.Upload(&s3manager.UploadInput{
-		Bucket: aws.String(destBucket),
-		Key:    aws.String(key),
-		Body:   up,
-	})
-
-	if err != nil {
-		log.WithError(err).WithFields(log.Fields{
-			"bucket":   destBucket,
-			"filename": key,
-		}).Error("failed to upload file")
-	}
-
-	log.WithField("location", result.Location).Info("file uploaded")
 }
 
 func genThumb(transform int, srcBucket, destBucket, key string) {
