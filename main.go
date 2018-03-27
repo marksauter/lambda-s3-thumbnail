@@ -40,19 +40,18 @@ func handle(ctx context.Context, req events.S3Event) (string, error) {
 	for _, r := range req.Records {
 		if key := r.S3.Object.Key; isImage(key) {
 			// generate thumbnail
-			srcBucket := r.S3.Bucket.Name
-			destBucket := os.Getenv("DESTINATION_BUCKET")
-			getSource(srcBucket, key)
+			bucket := r.S3.Bucket.Name
+			getSource(bucket, key)
 			for _, t := range transforms {
-				genThumb(t, srcBucket, destBucket, key)
+				genThumb(t, bucket, key)
 			}
 		}
 	}
 	return fmt.Sprintf("%d records processed", len(req.Records)), nil
 }
 
-func getSource(srcBucket, key string) {
-	local := tmp + srcBucket + "/" + key
+func getSource(bucket, key string) {
+	local := tmp + bucket + "/" + key
 
 	// ensure path is available
 	dir := filepath.Dir(local)
@@ -68,12 +67,12 @@ func getSource(srcBucket, key string) {
 	}
 
 	n, err := downloader.Download(f, &s3.GetObjectInput{
-		Bucket: aws.String(srcBucket),
+		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	})
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{
-			"bucket":   srcBucket,
+			"bucket":   bucket,
 			"key":      key,
 			"filename": local,
 		}).Error("failed to download file")
@@ -86,8 +85,8 @@ func getSource(srcBucket, key string) {
 	}).Info("file downloaded")
 }
 
-func genThumb(transform int, srcBucket, destBucket, key string) {
-	local := tmp + srcBucket + "/" + key
+func genThumb(transform int, bucket, key string) {
+	local := tmp + bucket + "/" + key
 
 	img, err := imaging.Open(local)
 	if err != nil {
@@ -102,8 +101,12 @@ func genThumb(transform int, srcBucket, destBucket, key string) {
 	dst = imaging.Paste(dst, thumb, image.Pt(0, 0))
 
 	// save the combined image to file
-	thumbName := strings.TrimSuffix(key, filepath.Ext(key)) + "-" + strconv.Itoa(transform) + filepath.Ext(key)
-	thumbLocal := tmp + destBucket + thumbName
+	keyWithPrefix := "thumb" + strings.TrimPrefix(key, "image")
+	thumbName := strings.TrimSuffix(keyWithPrefix, filepath.Ext(keyWithPrefix)) +
+		"-" +
+		strconv.Itoa(transform) +
+		filepath.Ext(key)
+	thumbLocal := tmp + bucket + thumbName
 
 	// ensure path is available
 	dir := filepath.Dir(thumbLocal)
@@ -125,14 +128,14 @@ func genThumb(transform int, srcBucket, destBucket, key string) {
 	}
 
 	result, err := uploader.Upload(&s3manager.UploadInput{
-		Bucket: aws.String(destBucket),
+		Bucket: aws.String(bucket),
 		Key:    aws.String(thumbName),
 		Body:   up,
 	})
 
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{
-			"bucket":    destBucket,
+			"bucket":    bucket,
 			"thumbnail": thumbName,
 		}).Error("failed to upload file")
 	}
@@ -142,6 +145,10 @@ func genThumb(transform int, srcBucket, destBucket, key string) {
 
 func isImage(name string) bool {
 	if strings.HasSuffix(name, ".jpg") {
+		return true
+	}
+
+	if strings.HasSuffix(name, ".jpeg") {
 		return true
 	}
 
