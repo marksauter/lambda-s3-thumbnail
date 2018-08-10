@@ -38,13 +38,12 @@ func handle(ctx context.Context, req events.S3Event) (string, error) {
 	log.SetOutput(os.Stdout)
 	log.Infof("%v", req)
 	for _, r := range req.Records {
-		if key := r.S3.Object.Key; isImage(key) {
-			// generate thumbnail
-			bucket := r.S3.Bucket.Name
-			getSource(bucket, key)
-			for _, t := range transforms {
-				genThumb(t, bucket, key)
-			}
+		key := r.S3.Object.Key
+		// generate thumbnail
+		bucket := r.S3.Bucket.Name
+		getSource(bucket, key)
+		for _, t := range transforms {
+			genThumb(t, bucket, key)
 		}
 	}
 	return fmt.Sprintf("%d records processed", len(req.Records)), nil
@@ -141,26 +140,6 @@ func genThumb(transform int, bucket, key string) {
 	}
 
 	log.WithField("location", result.Location).Info("file uploaded")
-}
-
-func isImage(name string) bool {
-	if strings.HasSuffix(name, ".jpg") {
-		return true
-	}
-
-	if strings.HasSuffix(name, ".jpeg") {
-		return true
-	}
-
-	if strings.HasSuffix(name, ".png") {
-		return true
-	}
-
-	if strings.HasSuffix(name, ".gif") {
-		return true
-	}
-
-	return false
 }
 
 func main() {

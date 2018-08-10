@@ -33,7 +33,8 @@ GOARCH  ?= amd64
 ZIP     ?= 7z a
 
 REGION         ?= us-east-1
-PACKAGE_BUCKET ?= lambda-$(REGION)-markus-ninja
+BRANCH 	       ?= development
+PACKAGE_BUCKET ?= lambda-$(REGION)-markus-ninja-$(BRANCH)
 
 
 WORKDIR = $(CURDIR:$(GOPATH)%=/go%)
