@@ -100,12 +100,21 @@ func genThumb(transform int, bucket, key string) {
 	dst = imaging.Paste(dst, thumb, image.Pt(0, 0))
 
 	// save the combined image to file
-	keyWithPrefix := "thumb" + strings.TrimPrefix(key, "image")
-	thumbName := strings.TrimSuffix(keyWithPrefix, filepath.Ext(keyWithPrefix)) +
-		"-" +
-		strconv.Itoa(transform) +
-		filepath.Ext(key)
-	thumbLocal := tmp + bucket + thumbName
+
+	// split key into path elements
+	splitKey := strings.Split(filepath.ToSlash(key), "/")
+	// key format should be, e.g. `image/png/ea/eg/ad/asdfasdf..."
+	if len(splitKey) < 3 {
+		log.WithError(err).WithField("key", key).Error("invalid key")
+		return
+	}
+	// replace prefix with thumbnail prefix
+	thumbKey := filepath.Join(append(
+		[]string{"thumb", strconv.Itoa(transform)},
+		splitKey[2:]...,
+	)...)
+
+	thumbLocal := tmp + bucket + thumbKey
 
 	// ensure path is available
 	dir := filepath.Dir(thumbLocal)
@@ -128,14 +137,14 @@ func genThumb(transform int, bucket, key string) {
 
 	result, err := uploader.Upload(&s3manager.UploadInput{
 		Bucket: aws.String(bucket),
-		Key:    aws.String(thumbName),
+		Key:    aws.String(thumbKey),
 		Body:   up,
 	})
 
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{
 			"bucket":    bucket,
-			"thumbnail": thumbName,
+			"thumbnail": thumbKey,
 		}).Error("failed to upload file")
 	}
 
